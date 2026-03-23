@@ -1,84 +1,113 @@
-<div align="center">
+# Plot-Adapter: 面向手绘场景的跨语言图形 API 推荐研究与系统实现
 
-## [NeurIPS 2022] AdaptFormer: Adapting Vision Transformers for Scalable Visual Recognition
+## 项目简介
 
-### [Project Page](http://www.shoufachen.com/adaptformer-page/) |  [arXiv](https://arxiv.org/abs/2205.13535)
+本项目围绕毕业论文 **《面向手绘场景的跨语言图形 API 推荐研究与系统实现》** 展开，聚焦于用户在可视化早期构思阶段通过手绘草图表达数据组织逻辑与视觉意图的真实场景，研究如何根据手绘输入自动推荐相应的图形 API，并进一步支持跨编程语言迁移与系统化落地。
 
-![teaser](figs/teaser.gif)
-</div>
+与传统基于标准数字图表的 Plot2API 方法不同，本研究面向更加贴近真实需求的手绘图表场景，重点解决以下三个问题：
 
+1. 现有研究多依赖标准数字图表数据，难以适应手绘草图与标准图表之间显著的视觉域差异；
+2. 不同编程语言对应独立的图形 API 体系，若对每种语言分别训练完整模型，将带来较高的训练、存储与部署成本；
+3. 复杂图形既依赖整体拓扑布局，也依赖局部边界与细粒度几何模式，单一建模机制难以实现充分表征。
 
-This is a PyTorch implementation of the paper [AdaptFormer: Adapting Vision Transformers for Scalable Visual Recognition](https://arxiv.org/abs/2205.13535).
+针对上述问题，本文从数据集构建、模型设计和系统实现三个层面开展研究，提出了一套完整的手绘图形 API 推荐方案。
 
-[Shoufa Chen](https://www.shoufachen.com/)<sup>1</sup>\*,
-[Chongjian Ge](https://chongjiange.github.io/)<sup>1</sup>\*,
-[Zhan Tong](https://scholar.google.com/citations?user=6FsgWBMAAAAJ)<sup>2</sup>,
-[Jiangliu Wang](https://laura-wang.github.io/)<sup>2,3</sup>,
-[Yibing Song](https://ybsong00.github.io/)<sup>2</sup>,
-[Jue Wang](http://juewang725.github.io/)<sup>2</sup>,
-[Ping Luo](http://luoping.me/)<sup>1</sup> <br>
-<sup>1</sup>The University of Hong Kong, <sup>2</sup>Tencent AI Lab, <sup>3</sup>The Chinese University of Hong Kong  
-\*denotes equal contribution
+---
 
-### Catalog
+## 论文核心工作
 
-- [x] Video code
-- [x] Image code
+本论文的主要工作包括以下三个部分：
 
-### Usage
+### 1. 构建手绘图形 API 推荐数据集 HDpy-13
 
-#### Install
-* Tesla V100 (32G): CUDA 10.1 + PyTorch 1.6.0 + torchvision 0.7.0
-* timm 0.4.8
-* einops
-* easydict
+为弥补现有数据集主要面向标准图表、缺乏真实手绘场景数据的不足，本文构建了 **HDpy-13（Hand-Drawn Python-13）** 数据集。该数据集并非直接依据绘图库中已有接口进行罗列式选取，而是首先从真实可视化任务中的**数据组织方式**出发，对常见表达需求进行归纳，再映射到具有代表性的图形 API 类别。
 
-#### Data Preparation
-See [DATASET.md](DATASET.md).
+最终，数据集围绕连续趋势展示、离散点位分布、类别量级比较、统计分布刻画、比例关系表达以及特殊结构描述等多类数据组织方式，选取了 13 种代表性图形 API，为后续模型训练与评估提供了数据基础。
 
-#### Training
-Start
-```bash
-# video
-OMP_NUM_THREADS=1 python3 -m torch.distributed.launch \
-    --nproc_per_node=8 --nnodes=8 \
-    --node_rank=$1 --master_addr=$2 --master_port=22234 \
-    --use_env main_video.py \
-    --finetune /path/to/pre_trained/checkpoints \
-    --output_dir /path/to/output \
-    --batch_size 16 --epochs 90 --blr 0.1 --weight_decay 0.0 --dist_eval \
-    --data_path /path/to/SSV2 --data_set SSV2 \
-    --ffn_adapt
-```
-on each of 8 nodes. `--master_addr` is set as the ip of the node 0. and `--node_rank` is 0, 1, ..., 7 for each node.
+### 2. 提出基于参数复用策略的跨语言轻量化适配模型 Plot-Adapter-V1
 
-```bash
-# image
-python3 -m torch.distributed.launch --nproc_per_node=8 --use_env main_image.py \
-    --batch_size 128 --cls_token \
-    --finetune /path/to/pre_trained/mae_pretrain_vit_b.pth \
-    --dist_eval --data_path /path/to/data \
-    --output_dir /path/to/output  \
-    --drop_path 0.0  --blr 0.1 \
-    --dataset cifar100 --ffn_adapt
-```
+针对不同编程语言具有不同图形 API 体系、现有方法在跨语言扩展时易导致参数膨胀的问题，本文提出 **Plot-Adapter-V1**。该方法在冻结预训练主干网络参数的前提下，通过引入轻量级适配模块，实现高层图形表达知识在不同语言任务间的共享，同时仅对少量与语言相关的参数进行任务适配，从而在降低参数开销的同时提升跨语言迁移效率。
 
-To obtain the pre-trained checkpoint, see [PRETRAIN.md](PRETRAIN.md).
-### Acknowledgement
+### 3. 提出融合轻量级卷积模块的 Plot-Adapter-V2
 
-The project is based on [MAE](https://github.com/facebookresearch/mae), [VideoMAE](https://github.com/MCG-NJU/VideoMAE), [timm](https://github.com/rwightman/pytorch-image-models), and [MAM](https://github.com/jxhe/unify-parameter-efficient-tuning).
-Thanks for their awesome works.
+针对现有方法对全局布局特征与局部细粒度图形模式协同建模不足的问题，本文进一步提出 **Plot-Adapter-V2**。该方法在 Plot-Adapter-V1 的基础上，引入轻量级卷积神经网络模块，以增强模型对局部边界、几何形态和细粒度差异的感知能力，从而提升在复杂手绘图形场景下的推荐性能。
 
-### Citation
-```
-@article{chen2022adaptformer,
-      title={AdaptFormer: Adapting Vision Transformers for Scalable Visual Recognition},
-      author={Chen, Shoufa and Ge, Chongjian and Tong, Zhan and Wang, Jiangliu and Song, Yibing and Wang, Jue and Luo, Ping},
-      journal={arXiv preprint arXiv:2205.13535},
-      year={2022}
-}
-```
+### 4. 设计并实现图形 API 推荐系统
 
-### License
+在算法研究基础上，本文进一步设计并实现了一个面向实际应用的图形 API 推荐系统。系统采用前后端协同、模块解耦的分层架构，支持用户注册登录、手绘图上传、在线画板绘制、推荐结果展示、可视化预览以及用户自定义任务训练等功能，实现了从手绘输入到图形 API 推荐再到可视化示例生成的完整流程闭环。
 
-This project is under the MIT license. See [LICENSE](LICENSE) for details.
+---
+
+## 项目目标
+
+本项目旨在构建一个面向真实可视化构思场景的智能推荐框架，使用户能够通过手绘草图这一自然交互形式，更高效地完成从可视化意图表达到账户图形 API 获取与示例代码生成的过程。项目希望在以下方面提供支持：
+
+- 为非专业用户和初学者降低图形编程门槛；
+- 为手绘场景下的可视化意图理解提供研究基础；
+- 为跨语言图形 API 推荐提供轻量化适配思路；
+- 为 Plot2API 相关研究提供数据、模型和系统一体化参考。
+
+---
+
+## 整体研究框架
+
+本研究的整体技术路线可概括为：
+
+**用户数据组织逻辑 → 手绘图表达 → 图形 API 推荐 → API 调用代码生成 → 可视化示例展示**
+
+在这一过程中，手绘草图不仅作为视觉输入，还承担了对用户底层数据组织逻辑和初步可视化意图的外显表达功能。系统通过识别手绘图中的图形结构模式，完成相应 API 的推荐，并进一步支持结果可视化展示。
+
+---
+
+## 研究特点
+
+本项目具有以下几个特点：
+
+- **面向真实手绘场景**：不同于传统标准图表输入，研究对象更贴近用户在可视化设计初期的自然表达方式；
+- **强调跨语言适配**：不是仅面向单一语言的图形 API 分类，而是关注跨语言场景下的知识共享与轻量迁移；
+- **兼顾全局与局部建模**：通过引入轻量级 CNN 模块增强细粒度特征提取能力；
+- **覆盖数据、模型与系统全流程**：从数据集构建到模型设计，再到系统实现，形成完整研究闭环。
+
+---
+
+## 适用场景
+
+本项目适用于以下场景：
+
+- 智能可视化辅助生成；
+- 图形 API 学习与教学辅助；
+- 手绘图表理解与分类研究；
+- 低门槛可视化开发工具设计；
+- 跨语言图形推荐任务研究。
+
+---
+
+## 论文信息
+
+- **论文题目**：面向手绘场景的跨语言图形 API 推荐研究与系统实现  
+- **学位类别**：软件工程硕士  
+- **研究方向**：图形 API 推荐、手绘图理解、参数高效微调、跨语言适配、可视化智能生成
+
+---
+
+## 后续工作展望
+
+尽管本文已完成手绘图形 API 推荐数据集构建、轻量化适配模型设计及系统实现，但仍有若干值得进一步研究的方向：
+
+1. 扩展更多编程语言和图形库场景，提升模型的跨平台泛化能力；
+2. 引入更丰富的手绘风格与复杂图形类别，增强模型在开放场景中的鲁棒性；
+3. 将推荐结果进一步扩展到完整代码生成与交互式编辑；
+4. 深入探索视觉结构理解与数据语义建模的联合优化机制；
+5. 推动系统向实际教学、科研辅助与可视化开发平台落地。
+
+---
+
+## 致谢
+
+感谢导师、实验室同学以及所有为本研究提供帮助的人。本项目作为毕业论文的重要组成部分，凝聚了从数据构建、模型设计到系统开发的持续探索与实践。
+
+---
+
+## 许可说明
+
+本项目仅用于学术研究与毕业论文相关工作展示。若需用于其他用途，请根据实际情况补充相应许可协议。
